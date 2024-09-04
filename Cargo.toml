@@ -1,0 +1,9 @@
+[package]
+name = "media_viewer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+druid = "0.8.3"
+gstreamer = "0.23.1"
+image = "0.25.2"
