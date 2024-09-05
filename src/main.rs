@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 struct InfoJson {
     framerate: u32,
     frame_extension: String,
-    frame_num: u32
+    frame_num: u32,
 }
 
 struct ImageWidget {
@@ -25,6 +25,7 @@ struct ImageWidget {
     image_buf: Option<ImageBuf>,
     t: f64,
     hash: HashMap<String, (String, Option<InfoJson>)>,
+    active_format: Option<druid::piet::ImageFormat>,
 
     curFrame: u32,
 }
@@ -51,13 +52,12 @@ impl Widget<()> for ImageWidget {
             }
             Event::AnimFrame(interval) => {
                 //println!("{:?}", interval);
-
-                ctx.request_paint();
                 ctx.request_anim_frame();
-                
+
                 if self.hash.contains_key(&self.name) {
                     if self.hash[&self.name].0 != "folder" {
                         if self.name != self.curName {
+                            ctx.request_paint();
                             let path =
                                 format!("./media/{}.{}", &self.name, &self.hash[&self.name].0);
                             let image: DynamicImage =
@@ -91,15 +91,18 @@ impl Widget<()> for ImageWidget {
                         let info = self.hash[&self.name].1.as_ref().unwrap();
 
                         //println!("{:?} and {:?}", self.t, );
-
+                        let mut process_this_frame = false;
                         self.t += (*interval as f64) * 1e-9;
-                        if self.name != self.curName  {
+                        if self.name != self.curName {
                             load = 0;
                             self.t = 0.0;
-                        } else if self.t > (1.0 / (info.framerate as f64)){
+                            process_this_frame = true;
+                            self.active_format = None;
+                        } else if self.t > (1.0 / (info.framerate as f64)) {
                             self.t = 0.0;
                             self.curFrame += 1;
                             load = self.curFrame;
+                            process_this_frame = true;
                         }
 
                         if self.curFrame >= info.frame_num {
@@ -108,34 +111,49 @@ impl Widget<()> for ImageWidget {
                             load = self.curFrame;
                         }
 
-                        // load relevent frame
-                        let frame_name = format!("{}/{}", &self.name, format_u32_with_leading_zeros(load, 4));
-                        let path =
-                            format!("./media/{}.{}", &frame_name, self.hash[&self.name].1.as_ref().unwrap().frame_extension);
-                        let image: DynamicImage =
-                            ImageReader::open(&path).unwrap().decode().unwrap();
-                        let width: usize = image.width().try_into().unwrap();
-                        let height: usize = image.height().try_into().unwrap();
-                        let raw = image.as_bytes();
+                        if process_this_frame {
+                            ctx.request_paint();
+                            // load relevent frame
+                            let frame_name = format!(
+                                "{}/{}",
+                                &self.name,
+                                format_u32_with_leading_zeros(load, 4)
+                            );
+                            let path = format!(
+                                "./media/{}.{}",
+                                &frame_name,
+                                self.hash[&self.name].1.as_ref().unwrap().frame_extension
+                            );
+                            let image: DynamicImage =
+                                ImageReader::open(&path).unwrap().decode().unwrap();
+                            let width: usize = image.width().try_into().unwrap();
+                            let height: usize = image.height().try_into().unwrap();
+                            let raw = image.as_bytes();
 
-                        let mut image_format: Option<druid::piet::ImageFormat> = None;
-                        if raw.len()
-                            == width
-                                * height
-                                * druid::piet::ImageFormat::RgbaSeparate.bytes_per_pixel()
-                        {
-                            image_format = Some(druid::piet::ImageFormat::RgbaSeparate);
-                        }
-                        if raw.len()
-                            == width * height * druid::piet::ImageFormat::Rgb.bytes_per_pixel()
-                        {
-                            image_format = Some(druid::piet::ImageFormat::Rgb);
-                        }
+                            let mut image_format: Option<druid::piet::ImageFormat> = None;
+                            if self.active_format.is_some() {
+                                image_format = self.active_format;
+                            } else {
+                                if raw.len()
+                                    == width
+                                        * height
+                                        * druid::piet::ImageFormat::RgbaSeparate.bytes_per_pixel()
+                                {
+                                    image_format = Some(druid::piet::ImageFormat::RgbaSeparate);
+                                }
+                                if raw.len()
+                                    == width * height * druid::piet::ImageFormat::Rgb.bytes_per_pixel()
+                                {
+                                    image_format = Some(druid::piet::ImageFormat::Rgb);
+                                }
+                                self.active_format = image_format;
+                            }
 
-                        if let Some(image_format) = image_format {
-                            self.image_buf =
-                                Some(ImageBuf::from_raw(raw, image_format, width, height));
-                            self.curName = self.name.clone();
+                            if let Some(image_format) = image_format {
+                                self.image_buf =
+                                    Some(ImageBuf::from_raw(raw, image_format, width, height));
+                                self.curName = self.name.clone();
+                            }
                         }
                     }
                 }
@@ -208,6 +226,7 @@ fn main() -> Result<(), PlatformError> {
         curName: "test".to_owned(),
         change: true,
         image_buf: Some(buf),
+        active_format: None
     })
     .show_titlebar(false)
     .set_window_state(druid::WindowState::Maximized);
@@ -265,7 +284,6 @@ fn get_file_names() -> std::io::Result<HashMap<String, (String, Option<InfoJson>
 
     Ok(file_info_map)
 }
-
 
 fn format_u32_with_leading_zeros(value: u32, width: usize) -> String {
     format!("{:0width$}", value, width = width)
