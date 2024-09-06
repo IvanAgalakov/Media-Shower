@@ -94,7 +94,7 @@ impl Widget<()> for ImageWidget {
                         let mut process_this_frame = false;
                         self.t += (*interval as f64) * 1e-9;
                         if self.name != self.curName {
-                            load = 0;
+                            load = 1;
                             self.t = 0.0;
                             process_this_frame = true;
                             self.active_format = None;
@@ -106,7 +106,7 @@ impl Widget<()> for ImageWidget {
                         }
 
                         if self.curFrame >= info.frame_num {
-                            self.curFrame = 0;
+                            self.curFrame = 1;
                             self.t = 0.0;
                             load = self.curFrame;
                         }
@@ -219,7 +219,7 @@ fn main() -> Result<(), PlatformError> {
     );
 
     let main_window = WindowDesc::new(ImageWidget {
-        curFrame: 0,
+        curFrame: 1,
         hash: file_info_map,
         t: 0.0,
         name: "test".to_owned(),
