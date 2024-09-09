@@ -206,26 +206,14 @@ fn main() -> Result<(), PlatformError> {
     let file_info_map = get_file_names().unwrap();
     //println!("{:?}", file_info_map);
 
-    let image: DynamicImage = ImageReader::open("./media/test.png")
-        .unwrap()
-        .decode()
-        .unwrap();
-    let raw = image.as_bytes();
-    let buf = ImageBuf::from_raw(
-        raw,
-        druid::piet::ImageFormat::RgbaSeparate,
-        image.width().try_into().unwrap(),
-        image.height().try_into().unwrap(),
-    );
-
     let main_window = WindowDesc::new(ImageWidget {
         curFrame: 1,
         hash: file_info_map,
         t: 0.0,
-        name: "test".to_owned(),
-        curName: "test".to_owned(),
+        name: "".to_owned(),
+        curName: "".to_owned(),
         change: true,
-        image_buf: Some(buf),
+        image_buf: None,
         active_format: None
     })
     .show_titlebar(false)

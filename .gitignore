@@ -1,2 +1,4 @@
 /target
 /media/**/
+*.jpg
+*.png
