@@ -1,16 +1,15 @@
 use druid::keyboard_types::Key;
-use druid::widget::{Flex, Image};
+use druid::widget::Image;
 use druid::{
-    AppLauncher, Event, ImageBuf, PlatformError, UpdateCtx, Widget, WidgetExt, WindowDesc,
+    AppLauncher, Event, ImageBuf, PlatformError, Widget, WindowDesc,
 };
-use image::{DynamicImage, ImageFormat, ImageReader};
+use image::{DynamicImage, ImageReader};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-// Struct to deserialize the framerate from info.json
+// Struct to deserialize the properties from info.json in folders
 #[derive(Deserialize, Serialize)]
 struct InfoJson {
     framerate: u32,
@@ -18,25 +17,26 @@ struct InfoJson {
     frame_num: u32,
 }
 
+// Information used internally within the ImageWidget
 struct ImageWidget {
-    curName: String,
+    cur_name: String,
     name: String,
-    change: bool,
     image_buf: Option<ImageBuf>,
     t: f64,
     hash: HashMap<String, (String, Option<InfoJson>)>,
     active_format: Option<druid::piet::ImageFormat>,
 
-    curFrame: u32,
+    cur_frame: u32,
 }
 
+// Druid Widget used to display the images and videos
 impl Widget<()> for ImageWidget {
     fn event(
         &mut self,
         ctx: &mut druid::EventCtx,
         event: &druid::Event,
-        data: &mut (),
-        env: &druid::Env,
+        _data: &mut (),
+        _env: &druid::Env,
     ) {
         match event {
             Event::KeyDown(event) => {
@@ -51,12 +51,11 @@ impl Widget<()> for ImageWidget {
                 ctx.request_anim_frame();
             }
             Event::AnimFrame(interval) => {
-                //println!("{:?}", interval);
                 ctx.request_anim_frame();
 
                 if self.hash.contains_key(&self.name) {
-                    if self.hash[&self.name].0 != "folder" {
-                        if self.name != self.curName {
+                    if self.hash[&self.name].0 != "folder" { // For individual images
+                        if self.name != self.cur_name {
                             ctx.request_paint();
                             let path =
                                 format!("./media/{}.{}", &self.name, &self.hash[&self.name].0);
@@ -83,32 +82,31 @@ impl Widget<()> for ImageWidget {
                             if let Some(image_format) = image_format {
                                 self.image_buf =
                                     Some(ImageBuf::from_raw(raw, image_format, width, height));
-                                self.curName = self.name.clone();
+                                self.cur_name = self.name.clone();
                             }
                         }
-                    } else {
-                        let mut load = self.curFrame;
+                    } else { // Folder of images to get rendered as a video
+                        let mut load = self.cur_frame;
                         let info = self.hash[&self.name].1.as_ref().unwrap();
 
-                        //println!("{:?} and {:?}", self.t, );
                         let mut process_this_frame = false;
                         self.t += (*interval as f64) * 1e-9;
-                        if self.name != self.curName {
+                        if self.name != self.cur_name {
                             load = 1;
                             self.t = 0.0;
                             process_this_frame = true;
                             self.active_format = None;
                         } else if self.t > (1.0 / (info.framerate as f64)) {
                             self.t = 0.0;
-                            self.curFrame += 1;
-                            load = self.curFrame;
+                            self.cur_frame += 1;
+                            load = self.cur_frame;
                             process_this_frame = true;
                         }
 
-                        if self.curFrame >= info.frame_num {
-                            self.curFrame = 1;
+                        if self.cur_frame >= info.frame_num {
+                            self.cur_frame = 1;
                             self.t = 0.0;
-                            load = self.curFrame;
+                            load = self.cur_frame;
                         }
 
                         if process_this_frame {
@@ -152,7 +150,7 @@ impl Widget<()> for ImageWidget {
                             if let Some(image_format) = image_format {
                                 self.image_buf =
                                     Some(ImageBuf::from_raw(raw, image_format, width, height));
-                                self.curName = self.name.clone();
+                                self.cur_name = self.name.clone();
                             }
                         }
                     }
@@ -166,35 +164,27 @@ impl Widget<()> for ImageWidget {
 
     fn lifecycle(
         &mut self,
-        ctx: &mut druid::LifeCycleCtx,
-        event: &druid::LifeCycle,
-        data: &(),
-        env: &druid::Env,
+        _ctx: &mut druid::LifeCycleCtx,
+        _event: &druid::LifeCycle,
+        _data: &(),
+        _env: &druid::Env,
     ) {
     }
 
-    fn update(&mut self, ctx: &mut druid::UpdateCtx, old_data: &(), data: &(), env: &druid::Env) {
-        //todo!()
-        // if self.change {
-        //     if self.image_buf.is_some() {
-        //         ctx.request_paint();
-        //     }
-        //     self.change = false;
-        // }
-    }
+    fn update(&mut self, _ctx: &mut druid::UpdateCtx, _old_data: &(), _data: &(), _env: &druid::Env) {}
 
     fn layout(
         &mut self,
-        ctx: &mut druid::LayoutCtx,
+        _ctx: &mut druid::LayoutCtx,
         bc: &druid::BoxConstraints,
-        data: &(),
-        env: &druid::Env,
+        _data: &(),
+        _env: &druid::Env,
     ) -> druid::Size {
-        bc.max()
+        bc.max()                        // fill the full screen
     }
 
     fn paint(&mut self, ctx: &mut druid::PaintCtx, data: &(), env: &druid::Env) {
-        if let Some(image_buf) = &self.image_buf {
+        if let Some(image_buf) = &self.image_buf {                          // paint if the image buffer exists
             let mut image =
                 Image::new(image_buf.clone()).fill_mode(druid::widget::FillStrat::FitHeight);
             image.paint(ctx, data, env);
@@ -202,17 +192,35 @@ impl Widget<()> for ImageWidget {
     }
 }
 
-fn main() -> Result<(), PlatformError> {
+use std::process::Command;
+
+fn is_ffmpeg_installed() -> bool {          // for later ffmpeg implementation
+    let output = Command::new("ffmpeg")
+        .arg("-version")
+        .output();
+    
+    match output {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+
+fn main() -> Result<(), PlatformError> {    
     let file_info_map = get_file_names().unwrap();
-    //println!("{:?}", file_info_map);
+
+    if is_ffmpeg_installed() {                  // for later ffmpeg implementation
+        println!("ffmpeg is installed.");
+    } else {
+        println!("ffmpeg is not installed.");
+    }
 
     let main_window = WindowDesc::new(ImageWidget {
-        curFrame: 1,
+        cur_frame: 1,
         hash: file_info_map,
         t: 0.0,
         name: "".to_owned(),
-        curName: "".to_owned(),
-        change: true,
+        cur_name: "".to_owned(),
         image_buf: None,
         active_format: None
     })
@@ -223,17 +231,8 @@ fn main() -> Result<(), PlatformError> {
         .launch(())
 }
 
-// fn ui_builder() -> impl Widget<()> {
-// let image: DynamicImage = ImageReader::open("./media/test.png").unwrap().decode().unwrap();
-// let raw = image.as_bytes();
-// let buf = ImageBuf::from_raw(raw, druid::piet::ImageFormat::RgbaSeparate, image.width().try_into().unwrap(), image.height().try_into().unwrap());
-//     let image = Image::new(buf).fill_mode(druid::widget::FillStrat::FitHeight);
-
-//     Flex::row().with_child(image).center()
-// }
-
 // Function to get file names and record them in a HashMap
-fn get_file_names() -> std::io::Result<HashMap<String, (String, Option<InfoJson>)>> {
+fn get_file_names() -> std::io::Result<HashMap<String, (String, Option<InfoJson>)>> { 
     let path = Path::new("./media/"); // Specify the directory path
     let mut file_info_map: HashMap<String, (String, Option<InfoJson>)> = HashMap::new(); // HashMap to store file names, extensions, and framerate
 
@@ -247,7 +246,6 @@ fn get_file_names() -> std::io::Result<HashMap<String, (String, Option<InfoJson>
         if file_type.is_dir() {
             // If it's a directory, the extension is "folder" and framerate comes from info.json
             let folder_base = file_name.to_string_lossy().to_string();
-            let mut framerate = 0;
 
             // Check if info.json exists and extract framerate if available
             let info_json_path = file_path.join("info.json");
