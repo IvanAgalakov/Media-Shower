@@ -2,7 +2,8 @@
 A very simple Media Viewer **(with no interface)** that loads both Pictures and Video from its `/media` folder, it loads the media based on the filenames within the folders.
 
 ### Quick Start
-Download the release zips from the release page:
+Download the latest release zips from the releases page:
+https://github.com/IvanAgalakov/media-viewer/releases
 
 
 Put your media within the `/media` folder, all common image types should be supported.
